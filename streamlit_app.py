@@ -6,10 +6,9 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 from streamlit_drawable_canvas import st_canvas
 
-
 # -------------------- Page config --------------------
 st.set_page_config(
-    page_title="Image Lab — Thresholds • Watermark • e-Signature • Logical Ops",
+    page_title="Image Lab — Thresholds • Watermark • e-Signature • Logical Ops • Alpha",
     layout="wide",
 )
 
@@ -49,6 +48,21 @@ def pil_download(arr, name="result.png"):
     buf.seek(0)
     return buf
 
+def checkerboard(h, w, tile=16):
+    """Create a gray checkerboard (for alpha previews)."""
+    c1, c2 = 230, 200
+    yy, xx = np.mgrid[0:h, 0:w]
+    board = (((yy // tile) + (xx // tile)) % 2) * (c1 - c2) + c2
+    return np.stack([board, board, board], axis=-1).astype(np.uint8)
+
+def preview_rgba(rgba_img):
+    """Composite RGBA over a checkerboard for visualizing transparency."""
+    h, w = rgba_img.shape[:2]
+    bg = checkerboard(h, w, tile=20).astype(np.float32)
+    fg = rgba_img[..., :3].astype(np.float32)
+    a  = (rgba_img[..., 3:4].astype(np.float32)) / 255.0
+    comp = (fg * a + bg * (1 - a)).astype(np.uint8)
+    return comp
 
 # -------------------- Sidebar (robust mapping) --------------------
 st.sidebar.title("Image Lab")
@@ -57,10 +71,10 @@ pages = {
     "Step 2 — Watermark": "wm",
     "Step 3 — e-Signature": "sign",
     "Step 4 — Logical Operations": "logic",
+    "Step 2-4 — Alpha / Transparency": "alpha",
 }
 label = st.sidebar.radio("Choose a module", list(pages.keys()))
 page = pages[label]
-
 
 # ==================== Step 1: Thresholds ====================
 if page == "thresh":
@@ -110,7 +124,6 @@ if page == "thresh":
             file_name="threshold_result.png",
             mime="image/png",
         )
-
 
 # ==================== Step 2: Watermark ====================
 elif page == "wm":
@@ -195,7 +208,6 @@ elif page == "wm":
         mime="image/png",
     )
 
-
 # ==================== Step 3: e-Signature ====================
 elif page == "sign":
     st.title("Step 3 — e-Signature")
@@ -278,7 +290,6 @@ elif page == "sign":
     else:
         st.info("Upload a base image to place your signature on.")
 
-
 # ==================== Step 4: Logical Operations ====================
 elif page == "logic":
     st.title("Step 4 — Logical Operations")
@@ -336,3 +347,83 @@ elif page == "logic":
         )
     else:
         st.info("Upload both images above to run logical operations.")
+
+# ==================== Step 2-4: Alpha / Transparency ====================
+elif page == "alpha":
+    st.title("Step 2-4 — Alpha Channel / Transparency")
+
+    st.markdown(
+        "Upload an image and create transparency by (a) removing a color, or (b) "
+        "using a threshold as the alpha channel. Download result as PNG."
+    )
+
+    up = st.file_uploader("Upload image (JPG/PNG)", type=["jpg", "jpeg", "png"], key="alpha_img")
+    if up is None:
+        st.info("Upload an image to begin.")
+        st.stop()
+
+    rgb = read_rgb(up)       # (H,W,3)
+    rgba = to_rgba(rgb)      # (H,W,4)
+
+    st.subheader("Original")
+    st.image(rgb, use_container_width=True)
+
+    mode = st.radio("Mode", ["Remove a color", "Threshold as alpha"], horizontal=True)
+
+    if mode == "Remove a color":
+        st.markdown("**Pick a color to remove** (that color becomes transparent).")
+        pick = st.color_picker("Target color", "#FFFFFF")
+        tol  = st.slider("Tolerance (0–255)", 0, 255, 25)
+
+        # Parse color picker (#RRGGBB) to (R,G,B)
+        R = int(pick[1:3], 16)
+        G = int(pick[3:5], 16)
+        B = int(pick[5:7], 16)
+        target = np.array([R, G, B], dtype=np.int16)
+
+        diff = np.abs(rgb.astype(np.int16) - target[None, None, :]).sum(axis=2)
+        mask = (diff <= tol).astype(np.uint8) * 255  # 255 where we remove
+
+        out = rgba.copy()
+        out[..., 3] = np.where(mask == 255, 0, 255).astype(np.uint8)
+
+        st.subheader("Preview (checkerboard shows transparency)")
+        st.image(preview_rgba(out), use_container_width=True)
+
+        st.download_button(
+            "Download PNG (color removed)",
+            data=pil_download(out, "alpha_color_removed.png"),
+            file_name="alpha_color_removed.png",
+            mime="image/png",
+        )
+
+    else:  # "Threshold as alpha"
+        st.markdown("**Make alpha from a grayscale threshold** (white=opaque by default).")
+        invert = st.checkbox("Invert alpha (white = transparent)", value=False)
+        method = st.selectbox("Threshold method", ["Global (manual T)", "Otsu (auto)"], index=1)
+
+        gray = to_gray(rgb)
+        if method == "Global (manual T)":
+            T = st.slider("T", 0, 255, 160)
+            _, alpha = cv2.threshold(gray, T, 255, cv2.THRESH_BINARY)
+        else:
+            _, alpha = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        if invert:
+            alpha = cv2.bitwise_not(alpha)
+
+        out = rgba.copy()
+        out[..., 3] = alpha
+
+        st.subheader("Alpha channel")
+        st.image(alpha, clamp=True, use_container_width=True)
+
+        st.subheader("Preview (checkerboard shows transparency)")
+        st.image(preview_rgba(out), use_container_width=True)
+
+        st.download_button(
+            "Download PNG (threshold alpha)",
+            data=pil_download(out, "alpha_threshold.png"),
+            file_name="alpha_threshold.png",
+            mime="image/png",
+        )
