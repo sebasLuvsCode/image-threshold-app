@@ -44,6 +44,7 @@ page = st.sidebar.radio("Choose a module", [
     "Step 1 — Thresholds",
     "Step 2 — Watermark",
     "Step 3 — e-Signature",
+   "Step 4 — Logical Operations",
 ])
 
 # ---------- Step 1: Thresholds ----------
@@ -204,32 +205,29 @@ elif page == "Step 3 — e-Signature":
             st.info("Draw a signature above or upload a signature PNG to place it.")
     else:
         st.info("Upload a base image/document to place your signature on.")
-# ---------- Step 4: Logical Operations ----------
-elif page == "Step 4 — Logical Operations":
-    st.title("Step 4 — Logical Operations")
 
-    img1_file = st.file_uploader("Upload first image", type=["jpg","jpeg","png"], key="img1")
-    img2_file = st.file_uploader("Upload second image", type=["jpg","jpeg","png"], key="img2")
+# --------- Step 4: Logical Operations ---------
+elif page == "Step 4 – Logical Operations":
+    st.title("Step 4 – Logical Operations")
 
-    if img1_file and img2_file:
-        img1 = read_rgb(img1_file)
-        img2 = read_rgb(img2_file)
+    # Upload two images to test logical operations
+    up1 = st.file_uploader("Upload first image (JPG/PNG)", type=["jpg", "jpeg", "png"], key="img1")
+    up2 = st.file_uploader("Upload second image (JPG/PNG)", type=["jpg", "jpeg", "png"], key="img2")
 
-        img1 = cv2.resize(img1, (300, 300))
-        img2 = cv2.resize(img2, (300, 300))
+    if up1 is not None and up2 is not None:
+        img1 = to_gray(read_rgb(up1))
+        img2 = to_gray(read_rgb(up2))
 
-        st.image([img1, img2], caption=["Image 1", "Image 2"], use_container_width=True)
+        # Resize to match dimensions
+        if img1.shape != img2.shape:
+            img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
 
-        op = st.selectbox("Choose logical operation", ["AND", "OR", "XOR", "NOT (on first image)"])
+        # Perform logical operations
+        and_img = cv2.bitwise_and(img1, img2)
+        or_img  = cv2.bitwise_or(img1, img2)
+        xor_img = cv2.bitwise_xor(img1, img2)
 
-        if op == "AND":
-            result = cv2.bitwise_and(img1, img2)
-        elif op == "OR":
-            result = cv2.bitwise_or(img1, img2)
-        elif op == "XOR":
-            result = cv2.bitwise_xor(img1, img2)
-        elif op == "NOT (on first image)":
-            result = cv2.bitwise_not(img1)
-
-        st.subheader("Result")
-        st.image(result, use_container_width=True)
+        # Show results side by side
+        st.subheader("Logical Operations Results")
+        st.image([img1, img2], caption=["Image 1", "Image 2"])
+        st.image([and_img, or_img, xor_img], caption=["AND", "OR", "XOR"])
