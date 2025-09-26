@@ -204,3 +204,32 @@ elif page == "Step 3 — e-Signature":
             st.info("Draw a signature above or upload a signature PNG to place it.")
     else:
         st.info("Upload a base image/document to place your signature on.")
+# ---------- Step 4: Logical Operations ----------
+elif page == "Step 4 — Logical Operations":
+    st.title("Step 4 — Logical Operations")
+
+    img1_file = st.file_uploader("Upload first image", type=["jpg","jpeg","png"], key="img1")
+    img2_file = st.file_uploader("Upload second image", type=["jpg","jpeg","png"], key="img2")
+
+    if img1_file and img2_file:
+        img1 = read_rgb(img1_file)
+        img2 = read_rgb(img2_file)
+
+        img1 = cv2.resize(img1, (300, 300))
+        img2 = cv2.resize(img2, (300, 300))
+
+        st.image([img1, img2], caption=["Image 1", "Image 2"], use_container_width=True)
+
+        op = st.selectbox("Choose logical operation", ["AND", "OR", "XOR", "NOT (on first image)"])
+
+        if op == "AND":
+            result = cv2.bitwise_and(img1, img2)
+        elif op == "OR":
+            result = cv2.bitwise_or(img1, img2)
+        elif op == "XOR":
+            result = cv2.bitwise_xor(img1, img2)
+        elif op == "NOT (on first image)":
+            result = cv2.bitwise_not(img1)
+
+        st.subheader("Result")
+        st.image(result, use_container_width=True)
