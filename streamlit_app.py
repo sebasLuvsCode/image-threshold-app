@@ -73,3 +73,26 @@ elif page == "Step 2 — Watermark":
     if st.button("Apply Watermark"):
         result = add_watermark(img, watermark_text)
         st.image(result, caption="Image with Watermark", use_container_width=True)
+
+# ---------- Step 3: e-Signature ----------
+elif page == "Step 3 — e-Signature":
+    st.header("Step 3 — e-Signature")
+    st.write("Draw your signature below:")
+
+    # Create drawing canvas
+    from streamlit_drawable_canvas import st_canvas
+
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 255, 255, 0)",  # Transparent background
+        stroke_width=3,
+        stroke_color="black",
+        background_color="white",
+        update_streamlit=True,
+        height=200,
+        width=600,
+        drawing_mode="freedraw",
+        key="canvas",
+    )
+
+    if canvas_result.image_data is not None:
+        st.image(canvas_result.image_data, caption="Your e-Signature")
